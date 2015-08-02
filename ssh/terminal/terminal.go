@@ -111,6 +111,7 @@ func NewTerminal(c io.ReadWriter, prompt string) *Terminal {
 }
 
 const (
+	keyCtrlC     = 3
 	keyCtrlD     = 4
 	keyCtrlU     = 21
 	keyEnter     = '\r'
@@ -190,6 +191,17 @@ func bytesToKey(b []byte, pasteActive bool) (rune, []byte) {
 			return keyAltRight, b[6:]
 		case 'D':
 			return keyAltLeft, b[6:]
+		}
+	}
+
+	if !pasteActive && len(b) >= 2 && b[0] == keyEscape {
+		switch b[1] {
+		case 98:
+			return keyAltLeft, b[2:]
+		case 102:
+			return keyAltRight, b[2:]
+		case 127:
+			return keyDeleteWord, b[2:]
 		}
 	}
 
@@ -520,7 +532,7 @@ func (t *Terminal) handleKey(key rune) (line string, ok bool) {
 		}
 		t.line = t.line[:t.pos]
 		t.moveCursorToPos(t.pos)
-	case keyCtrlD:
+	case keyCtrlD, keyCtrlC:
 		// Erase the character under the current position.
 		// The EOF case when the line is empty is handled in
 		// readLine().
@@ -685,6 +697,11 @@ func (t *Terminal) readLine() (line string, err error) {
 				break
 			}
 			if !t.pasteActive {
+				if key == keyCtrlC {
+					if len(t.line) == 0 {
+						return "", io.EOF
+					}
+				}
 				if key == keyCtrlD {
 					if len(t.line) == 0 {
 						return "", io.EOF

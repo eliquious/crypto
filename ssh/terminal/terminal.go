@@ -532,7 +532,17 @@ func (t *Terminal) handleKey(key rune) (line string, ok bool) {
 		}
 		t.line = t.line[:t.pos]
 		t.moveCursorToPos(t.pos)
-	case keyCtrlD, keyCtrlC:
+	case keyCtrlC:
+		t.moveCursorToPos(len(t.line))
+		t.queue([]rune("\r\n"))
+		line = string("")
+		ok = true
+		t.line = t.line[:0]
+		t.pos = 0
+		t.cursorX = 0
+		t.cursorY = 0
+		t.maxLine = 0
+	case keyCtrlD:
 		// Erase the character under the current position.
 		// The EOF case when the line is empty is handled in
 		// readLine().
@@ -733,8 +743,10 @@ func (t *Terminal) readLine() (line string, err error) {
 		t.outBuf = t.outBuf[:0]
 		if lineOk {
 			if t.echo {
-				t.historyIndex = -1
-				t.history.Add(line)
+				if len(line) > 0 {
+					t.historyIndex = -1
+					t.history.Add(line)
+				}
 			}
 			if lineIsPasted {
 				err = ErrPasteIndicator
@@ -868,6 +880,14 @@ func (t *Terminal) SetBracketedPasteMode(on bool) {
 	}
 }
 
+func (t *Terminal) LoadInitialHistory(entries []string) {
+	t.history.Load(entries)
+}
+
+func (t *Terminal) RemoveLastLine() {
+	t.history.RemoveLast()
+}
+
 // stRingBuffer is a ring buffer of strings.
 type stRingBuffer struct {
 	// entries contains max elements.
@@ -879,7 +899,29 @@ type stRingBuffer struct {
 	size int
 }
 
+func (s *stRingBuffer) Load(entries []string) {
+	if s.entries == nil && len(entries) > 0 {
+		defaultNumEntries := len(entries) * 2
+		if defaultNumEntries < 100 {
+			defaultNumEntries = 100
+		}
+		s.entries = make([]string, defaultNumEntries)
+		s.max = defaultNumEntries
+	}
+
+	for _, e := range entries {
+		s.Add(e)
+	}
+}
+
+func (s *stRingBuffer) RemoveLast() {
+	s.head = (s.head - 1) % s.max
+}
+
 func (s *stRingBuffer) Add(a string) {
+	if len(a) == 0 {
+		return
+	}
 	if s.entries == nil {
 		const defaultNumEntries = 100
 		s.entries = make([]string, defaultNumEntries)
